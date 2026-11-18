@@ -26,9 +26,14 @@ n8n (martes 09:00, o manual)
   `<a href>`. El HTML generado tiene esa forma: título como anchor, descripción, y una línea con fuente y
   engagement como contexto. Las reglas de 0% (news, launches, personal projects) filtran solas el ruido que
   trae la comunidad, y la revisión humana en el Sheet sigue igual.
-- **GitHub Actions en vez de n8n para correr el motor.** El motor es Python 3.12 + yt-dlp y tarda 2-3 minutos.
-  Desde la red de Monks, Netskope bloquea reddit.com; un runner de GitHub no tiene ese problema. n8n cloud
-  además no puede ejecutar comandos. Así n8n solo hace un GET.
+- **GitHub Actions en vez de n8n para correr el motor.** El motor es Python 3.12 + yt-dlp y tarda unos 7
+  minutos. n8n cloud no puede ejecutar comandos, y desde la red de Monks Netskope bloquea reddit.com y la
+  búsqueda web keyless falla seguido. En el runner la web keyless es estable. Así n8n solo hace un GET.
+- **Reddit y YouTube no funcionan keyless desde un runner.** Reddit rechaza IPs de datacenter y YouTube les
+  pide login anti-bot ("Sign in to confirm you're not a bot"); verificado en la primera corrida del fork:
+  `reddit: unreachable`, `youtube: rate-limited`.
+  La única forma de tenerlas en la Action es el secret `SCRAPECREATORS_API_KEY` (10k llamadas gratis), que
+  hace backfill de ambas. Desde una laptop YouTube sí funciona vía yt-dlp.
 - **Candidatos, no edición.** El Action no escribe en `data/newsletters/`. Lo que publica el sitio sigue
   saliendo del flujo de revisión.
 
@@ -56,8 +61,7 @@ la rama del PR esas dos vías no existen. En su lugar:
 
 1. **La Action corre sola en el PR** (trigger `pull_request`, acotado a esta carpeta y al workflow). Hace
    exactamente lo mismo que el cron pero no commitea: deja `latest.html`, `latest.json` y los logs del motor
-   como artifact `community-signal` en la pestaña Checks del PR. Ahí se ve si Reddit y la web keyless
-   responden desde el runner, cosa que desde la red de Monks no se puede comprobar.
+   como artifact `community-signal` en la pestaña Checks del PR, con el `sourceStatus` de cada fuente.
 2. **n8n se puede probar contra la rama.** El PR incluye un `data/community-signal/latest.html` generado
    desde una laptop (52 candidatos, sin Reddit). Importar el workflow, cambiar en "Fetch latest.html" la URL
    de `/main/` a `/<nombre-de-la-rama>/`, y usar "Run manually". Cuando el PR se mergea, volver a `/main/`.
@@ -75,8 +79,8 @@ bundle que incluya el CA del proxy.
 
 ## Qué esperar de la primera edición
 
-En la prueba del 2026-11-18 desde una laptop (sin Reddit): 63 candidatos únicos de 4 corridas, 74 links en el
-HTML contando "related coverage". Con el prompt actual, la mayoría va a quedar en 0% (news y launches dominan
+Primera corrida real en GitHub Actions (2026-11-18): 56 candidatos en 7 minutos, de Hacker News (26), web (12),
+dev.to (13), GitHub (2) y 3 temas trending. Reddit y YouTube quedaron afuera por lo explicado arriba. Con el prompt actual, la mayoría va a quedar en 0% (news y launches dominan
 Hacker News) y eso está bien: la señal útil son los 10-15 artículos de fondo con mucho engagement que no llegan
 por los newsletters de email. Si la proporción 0% resulta demasiado alta, bajar `MAX_CANDIDATES` o subir
 `CANDIDATE_FLOOR` en `convert.py` antes de tocar el prompt.
