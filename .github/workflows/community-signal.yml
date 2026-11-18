@@ -1,0 +1,105 @@
+name: Community Signal (last30days)
+
+# Runs the last30days engine on a GitHub-hosted runner (outside the corporate proxy,
+# so Reddit and keyless web search work) and commits this week's candidate links
+# under data/community-signal/. The site never reads that folder; n8n does.
+#
+# On a pull request that touches this pipeline it runs the engine too, but uploads
+# the result as an artifact instead of committing, so the change can be tried
+# before it reaches main (schedule and workflow_dispatch only work from main).
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"        # Mondays 09:00 UTC
+  pull_request:
+    paths:
+      - ".github/workflows/community-signal.yml"
+      - "scripts/community-signal/**"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Issue date (YYYY-MM-DD). Defaults to today."
+        required: false
+      topics:
+        description: "Pipe-separated topics. Defaults to the COMMUNITY_SIGNAL_TOPICS repo variable."
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: community-signal
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12 and yt-dlp
+        run: |
+          uv python install 3.12
+          uv tool install yt-dlp
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache last30days-skill checkout
+        uses: actions/cache@v4
+        with:
+          path: .cache/last30days-skill
+          key: last30days-skill-${{ vars.LAST30DAYS_REF || 'v4.3.2' }}
+
+      - name: Generate candidates
+        env:
+          SKILL_REF: ${{ vars.LAST30DAYS_REF || 'v4.3.2' }}
+          COMMUNITY_SIGNAL_TOPICS: ${{ inputs.topics || vars.COMMUNITY_SIGNAL_TOPICS }}
+          DEVTO_TAGS: ${{ vars.DEVTO_TAGS || 'ai,llm,agents' }}
+          # Optional keys; each one unlocks more sources. All are plain repo secrets.
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          SCRAPECREATORS_API_KEY: ${{ secrets.SCRAPECREATORS_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x scripts/community-signal/run.sh
+          scripts/community-signal/run.sh "${{ inputs.date || '' }}"
+
+      - name: Upload candidates (always; the only output on pull requests)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-signal
+          path: |
+            data/community-signal/latest.html
+            data/community-signal/latest.json
+            data/community-signal/raw/**/*.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Summarize
+        run: |
+          {
+            echo "## Community Signal"
+            python3 -I - <<'EOF'
+          import json
+          d = json.load(open("data/community-signal/latest.json"))
+          print(f"- **{len(d['candidates'])}** candidates for {d['generatedFor']}")
+          print(f"- topics: {', '.join(d['topics'])}")
+          print("- sources: " + ", ".join(f"{k}={v}" for k, v in sorted(d['sourceStatus'].items()) if v != 'skipped-unconfigured'))
+          EOF
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "community-signal[bot]"
+          git config user.email "community-signal@users.noreply.github.com"
+          git add data/community-signal
+          if git diff --cached --quiet; then
+            echo "nothing to commit"; exit 0
+          fi
+          git commit -m "chore(community-signal): candidates for $(python3 -c 'import json;print(json.load(open("data/community-signal/latest.json"))["generatedFor"])') [skip ci]"
+          git push

@@ -27,3 +27,8 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# community-signal: engine logs and exports are regenerated weekly, only the html/json candidates are tracked
+data/community-signal/raw/
+.cache/
+__pycache__/

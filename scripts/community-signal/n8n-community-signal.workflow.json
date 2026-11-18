@@ -1,0 +1,87 @@
+{
+  "name": "Community Signal → curation (last30days)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [2],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Every Tuesday 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "notes": "Runs the day after the GitHub Action (Mondays 09:00 UTC) commits data/community-signal/latest.html."
+    },
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 220]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/JulianEzequielPico-Monks/transformation-tech-newsletter/main/data/community-signal/latest.html",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Fetch latest.html",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 110],
+      "notes": "Public raw URL, no credentials. If the repo goes private, switch to the GitHub node (Get file) with a token."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Shape the fetched HTML like a forwarded newsletter email so the existing\n// Gemini curation node can consume it without changes.\nconst html = $input.first().json.data;\nif (!html || html.length < 500) {\n  throw new Error('latest.html is empty or too short; did the GitHub Action run?');\n}\nconst m = html.match(/<title>([^<]*)<\\/title>/i);\nconst subject = m ? m[1] : 'Community Signal';\nconst dateMatch = subject.match(/\\d{4}-\\d{2}-\\d{2}/);\nreturn [{\n  json: {\n    // mirror the fields your Gmail node exposes; rename to match your flow\n    subject,\n    from: 'Community Signal <last30days@noreply>',\n    source: 'Community Signal',\n    date: dateMatch ? dateMatch[0] : new Date().toISOString().slice(0, 10),\n    html,\n  },\n}];"
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Shape as newsletter email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 110]
+    },
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "→ connect to your Gemini curation node",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [800, 110],
+      "notes": "Replace this node with the same Gemini + Sheets chain your Gmail branch uses. The item carries `html` (the email body) and `source` = 'Community Signal' for the `source` field of each link."
+    }
+  ],
+  "connections": {
+    "Every Tuesday 09:00": {
+      "main": [[{ "node": "Fetch latest.html", "type": "main", "index": 0 }]]
+    },
+    "Run manually": {
+      "main": [[{ "node": "Fetch latest.html", "type": "main", "index": 0 }]]
+    },
+    "Fetch latest.html": {
+      "main": [[{ "node": "Shape as newsletter email", "type": "main", "index": 0 }]]
+    },
+    "Shape as newsletter email": {
+      "main": [[{ "node": "→ connect to your Gemini curation node", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true }
+}
