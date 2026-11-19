@@ -9,6 +9,7 @@
 #   LAST30DAYS_PYTHON    Python 3.12 interpreter (default: `uv python find 3.12`)
 #   COMMUNITY_SIGNAL_TOPICS  newline- or pipe-separated topics, used when none are given as args
 #   DEVTO_TAGS           dev.to tags that opt that keyless source in (default: ai,llm,agents)
+#   DAYS                 lookback window in days (default: 30; use 7 for "this week")
 #   SSL_CERT_FILE        CA bundle, only needed behind a TLS-intercepting proxy
 #   OUT_DIR              where outputs go (default: data/community-signal)
 #
@@ -43,12 +44,13 @@ PY="${LAST30DAYS_PYTHON:-$(uv python find 3.12)}"
 
 export LAST30DAYS_ALLOW_ENGINE_PLAN=1   # headless: let the engine plan without a hosting LLM
 DEVTO_TAGS="${DEVTO_TAGS:-ai,llm,agents}"
+DAYS="${DAYS:-30}"
 RAW="$OUT_DIR/raw/$ISSUE_DATE"
 mkdir -p "$RAW"
 inputs=()
 
 echo ">> discovery: AI" >&2
-if "$PY" "$ENGINE" --discover "AI" --emit=json --output "$RAW/discover-ai.json" \
+if "$PY" "$ENGINE" --discover "AI" --days "$DAYS" --emit=json --output "$RAW/discover-ai.json" \
      --save-dir "$RAW/save" --no-browser-cookies > "$RAW/discover-ai.log" 2>&1; then
   inputs+=("$RAW/discover-ai.json")
 else
@@ -59,7 +61,7 @@ for topic in "${TOPICS[@]}"; do
   [ -z "$topic" ] && continue
   slug="$(printf '%s' "$topic" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-')"
   echo ">> research: $topic" >&2
-  if "$PY" "$ENGINE" "$topic" --devto-tags "$DEVTO_TAGS" --emit=json --output "$RAW/research-$slug.json" \
+  if "$PY" "$ENGINE" "$topic" --days "$DAYS" --devto-tags "$DEVTO_TAGS" --emit=json --output "$RAW/research-$slug.json" \
        --save-dir "$RAW/save" --no-browser-cookies > "$RAW/research-$slug.log" 2>&1; then
     inputs+=("$RAW/research-$slug.json")
   else

@@ -56,6 +56,9 @@ ENGAGEMENT_KEYS = {
 # Sources that never carry a link worth curating on their own.
 SKIP_SOURCES = {"jobs", "polymarket"}
 
+# Ad and tracking redirectors that the keyless web backends sometimes leak into evidence URLs.
+JUNK_URL = re.compile(r"^https?://(duckduckgo\.com/y\.js|www\.bing\.com/aclick|www\.google\.com/aclk|.*\.doubleclick\.net/)", re.I)
+
 # Minimum engine relevance for a result to be offered to the curator at all.
 CANDIDATE_FLOOR = 0.25
 MAX_CANDIDATES = 80
@@ -133,7 +136,7 @@ def candidate_from_result(result: dict[str, Any], topic: str, clusters: list[dic
     url = (result.get("url") or "").strip()
     title = (result.get("title") or "").strip()
     source = result.get("source", "web")
-    if not url or not title or source in SKIP_SOURCES:
+    if not url or not title or source in SKIP_SOURCES or JUNK_URL.match(url):
         return None
     score = float(result.get("relevance_score", 0.0))
     engagement = result.get("engagement") or {}
@@ -171,7 +174,7 @@ def candidates_from_research(doc: dict[str, Any]) -> list[dict[str, Any]]:
 def candidates_from_discovery(doc: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for item in doc.get("results", []):
-        urls = [u for u in item.get("evidence_urls", []) if u]
+        urls = [u for u in item.get("evidence_urls", []) if u and not JUNK_URL.match(u)]
         if not urls:
             continue
         topic = item.get("topic", "Untitled topic")
