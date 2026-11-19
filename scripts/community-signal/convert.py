@@ -178,6 +178,12 @@ def candidates_from_discovery(doc: dict[str, Any]) -> list[dict[str, Any]]:
         if not urls:
             continue
         topic = item.get("topic", "Untitled topic")
+        # One-shot discovery names topics by heuristic ("Windows 11" for a story about Windows 11
+        # tracking coding agents). The headline the engine quotes after its stats sentence is
+        # far more descriptive, so use it as the title when present.
+        why = (item.get("why_spiking") or "").strip()
+        headline = re.sub(r"^\d+ evidence items on .*? generated [\d,]+ native interactions\.\s*", "", why).strip()
+        title = headline if len(headline) >= 12 else topic
         eng = item.get("engagement") or {}
         per_source = []
         if isinstance(eng, dict):
@@ -191,7 +197,7 @@ def candidates_from_discovery(doc: dict[str, Any]) -> list[dict[str, Any]]:
             description += f' Top comment: "{str(top)[:240]}"'
         out.append(
             {
-                "title": topic,
+                "title": title,
                 "link": urls[0],
                 "description": description,
                 "source": "Trending (" + ", ".join(SOURCE_LABEL.get(s, s) for s in item.get("sources", [])) + ")",

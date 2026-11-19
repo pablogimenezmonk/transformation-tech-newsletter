@@ -50,7 +50,10 @@ mkdir -p "$RAW"
 inputs=()
 
 echo ">> discovery: AI" >&2
-if "$PY" "$ENGINE" --discover "AI" --days "$DAYS" --emit=json --output "$RAW/discover-ai.json" \
+# One-shot discovery names topics by heuristic ("Windows 11"), then researches that short name.
+# With the keyless web backend in the mix the top evidence URL becomes a generic search hit or
+# even an ad; restricted to community sources it is the story people actually upvoted.
+if EXCLUDE_SOURCES=grounding "$PY" "$ENGINE" --discover "AI" --days "$DAYS" --emit=json --output "$RAW/discover-ai.json" \
      --save-dir "$RAW/save" --no-browser-cookies > "$RAW/discover-ai.log" 2>&1; then
   inputs+=("$RAW/discover-ai.json")
 else
